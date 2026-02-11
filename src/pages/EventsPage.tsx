@@ -3,6 +3,7 @@
  */
 import { useState, useEffect, useCallback } from "react";
 import { eventsApi, Event } from "../services/api";
+import { io } from "socket.io-client";
 import { Search, RefreshCw, Filter } from "lucide-react";
 
 export default function EventsPage() {
@@ -35,11 +36,27 @@ export default function EventsPage() {
     loadEvents();
   }, [loadEvents]);
 
-  // Auto-refresh every 10 seconds
+  // WebSocket for real-time updates
   useEffect(() => {
-    const interval = setInterval(loadEvents, 10000);
-    return () => clearInterval(interval);
-  }, [loadEvents]);
+    const socket = io("http://localhost:3000");
+
+    socket.on("newEvent", (event: Event) => {
+      // Only append if it matches current filters and we're on page 0
+      const matchesDevice =
+        !deviceFilter ||
+        event.deviceId.toLowerCase().includes(deviceFilter.toLowerCase());
+      const matchesType = !typeFilter || event.eventType === typeFilter;
+
+      if (matchesDevice && matchesType && page === 0) {
+        setEvents((prev) => [event, ...prev].slice(0, limit));
+        setTotal((prev) => prev + 1);
+      }
+    });
+
+    return () => {
+      socket.disconnect();
+    };
+  }, [deviceFilter, typeFilter, page]);
 
   const totalPages = Math.ceil(total / limit);
 
@@ -49,7 +66,7 @@ export default function EventsPage() {
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Event Log</h1>
           <p className="text-gray-500 mt-1">
-            {total} total events • Auto-refreshes every 10s
+            {total} total events • Updated in real-time
           </p>
         </div>
         <button

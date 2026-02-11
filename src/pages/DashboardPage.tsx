@@ -3,6 +3,7 @@
  */
 import { useState, useEffect } from "react";
 import { eventsApi, Event, EventStats } from "../services/api";
+import { io } from "socket.io-client";
 import {
   ShieldCheck,
   ShieldX,
@@ -18,6 +19,39 @@ export default function DashboardPage() {
 
   useEffect(() => {
     loadData();
+
+    // Connect to WebSocket for real-time updates
+    // In dev, connect to localhost:3000 or the local IP
+    const socket = io("http://localhost:3000");
+
+    socket.on("connect", () => {
+      console.log("Connected to real-time events gateway");
+    });
+
+    socket.on("newEvent", (event: Event) => {
+      console.log("New event received via WebSocket:", event);
+
+      // Update recent events list instantly
+      setRecentEvents((prev) => [event, ...prev].slice(0, 10));
+
+      // Increment stats locally for instant feedback
+      setStats((prev) => {
+        if (!prev) return null;
+        const newStats = {
+          ...prev,
+          totalEvents: prev.totalEvents + 1,
+          todayEvents: prev.todayEvents + 1,
+        };
+        if (event.eventType === "ACCESS_GRANTED") newStats.accessGranted++;
+        if (event.eventType === "ACCESS_DENIED") newStats.accessDenied++;
+        if (event.eventType === "SENSOR_ALERT") newStats.sensorAlerts++;
+        return newStats;
+      });
+    });
+
+    return () => {
+      socket.disconnect();
+    };
   }, []);
 
   const loadData = async () => {
